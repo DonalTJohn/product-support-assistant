@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Visual Product Troubleshooting • Product Support Assistant AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Visual Product Troubleshooting & Defect Inspection</h1>
+  <p class="page-desc">Upload photos of defective hardware, damaged connectors, or device error screens for instant AI multimodal diagnostics.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: start;">
+  
+  <!-- Left: Upload & Prompt -->
+  <div class="card">
+    <form id="vision-form">
+      <label>1. Upload Product Photo or Error Screenshot</label>
+      <div id="drop-zone" style="border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: 28px; text-align: center; background: #fafafa; cursor: pointer; transition: all 0.2s ease;">
+        <div id="drop-text">
+          <div style="font-size: 32px; margin-bottom: 8px;">📷</div>
+          <div style="font-weight: 600; color: var(--text-main);">Click or Drag & Drop Image Here</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Supports PNG, JPG, WEBP (Max 25MB)</div>
+        </div>
+        <input type="file" id="image-input" name="image" accept="image/*" style="display: none;" required>
+        <img id="preview-img" style="max-height: 220px; max-width: 100%; border-radius: 8px; margin-top: 12px; display: none; object-fit: contain;" alt="Preview">
+      </div>
+
+      <div style="margin-top: 20px;">
+        <label>2. Symptom or Customer Notes (Optional)</label>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+          <span class="chip symptom-chip">Burnt charging port</span>
+          <span class="chip symptom-chip">Display screen artifacts</span>
+          <span class="chip symptom-chip">LED blinking error code</span>
+          <span class="chip symptom-chip">Loose hinge / physical crack</span>
+        </div>
+        <input type="text" id="prompt-input" name="prompt" value="Inspect this product image, detect physical damage or error status, and provide troubleshooting steps." style="margin-top: 4px;">
+      </div>
+
+      <button type="submit" id="btn-inspect" class="btn btn-primary" style="width: 100%; margin-top: 20px;">
+        <span id="inspect-text">Diagnose Product Image 🔍</span>
+        <span id="inspect-spinner" class="spinner" style="display: none;"></span>
+      </button>
+    </form>
+  </div>
+
+  <!-- Right: Diagnostic Output -->
+  <div class="card" style="min-height: 480px; display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+      <h3 style="font-size: 1.1rem; font-weight: 700;">Vision Diagnostic Report</h3>
+      <button id="btn-copy" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; display: none;">📋 Copy Report</button>
+    </div>
+
+    <div id="vision-placeholder" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); text-align: center; padding: 40px 20px;">
+      <div style="font-size: 40px; margin-bottom: 12px; opacity: 0.6;">🔬</div>
+      <p style="font-weight: 500;">No image diagnostic yet</p>
+      <p style="font-size: 0.85rem; margin-top: 4px;">Upload a damaged product photo to see AI visual detection results.</p>
+    </div>
+
+    <div id="vision-result" class="result-box" style="display: none; background: #ffffff; border: none; padding: 0;"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const dropZone = document.getElementById('drop-zone');
+  const imageInput = document.getElementById('image-input');
+  const previewImg = document.getElementById('preview-img');
+  const dropText = document.getElementById('drop-text');
+  const promptInput = document.getElementById('prompt-input');
+
+  dropZone.addEventListener('click', () => imageInput.click());
+
+  imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        previewImg.src = ev.target.result;
+        previewImg.style.display = 'block';
+        dropText.style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  document.querySelectorAll('.symptom-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      promptInput.value = `The customer reports: ${chip.innerText}. Inspect the image for damage, failure modes, and provide fix recommendations.`;
+    });
+  });
+
+  document.getElementById('vision-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!imageInput.files[0]) {
+      alert("Please select or drop an image file first.");
+      return;
+    }
+
+    const btnInspect = document.getElementById('btn-inspect');
+    const inspectText = document.getElementById('inspect-text');
+    const inspectSpinner = document.getElementById('inspect-spinner');
+    const resultBox = document.getElementById('vision-result');
+    const placeholder = document.getElementById('vision-placeholder');
+    const copyBtn = document.getElementById('btn-copy');
+
+    btnInspect.disabled = true;
+    inspectText.innerText = 'Analyzing Image with Azure AI...';
+    inspectSpinner.style.display = 'inline-block';
+
+    const formData = new FormData();
+    formData.append('image', imageInput.files[0]);
+    formData.append('prompt', promptInput.value);
+
+    try {
+      const res = await fetch('/api/visual-troubleshoot', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        placeholder.style.display = 'none';
+        resultBox.style.display = 'block';
+        resultBox.innerHTML = `<span style="color:var(--danger)">⚠️ Error: ${data.error}</span>`;
+      } else {
+        placeholder.style.display = 'none';
+        resultBox.style.display = 'block';
+        resultBox.innerText = data.result;
+        copyBtn.style.display = 'inline-block';
+      }
+    } catch (err) {
+      placeholder.style.display = 'none';
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `<span style="color:var(--danger)">⚠️ Inspection failed: ${err.message}</span>`;
+    } finally {
+      btnInspect.disabled = false;
+      inspectText.innerText = 'Diagnose Product Image 🔍';
+      inspectSpinner.style.display = 'none';
+    }
+  });
+
+  document.getElementById('btn-copy').addEventListener('click', () => {
+    const text = document.getElementById('vision-result').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('btn-copy');
+      btn.innerText = '✅ Copied!';
+      setTimeout(() => { btn.innerText = '📋 Copy Report'; }, 2000);
+    });
+  });
+</script>
+{% endblock %}

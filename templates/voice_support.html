@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Voicemail & Call Transcriber • Product Support Assistant AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Voice-to-Text Support Call & Voicemail Transcriber</h1>
+  <p class="page-desc">Upload recorded customer calls or audio voicemails. Converts audio to text via Azure Speech Service and auto-generates structured ticket action items.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: start;">
+  
+  <!-- Left: Audio Upload Form -->
+  <div class="card">
+    <form id="speech-form">
+      <label>1. Select Audio Recording (.wav, .mp3, .m4a, .ogg)</label>
+      <input type="file" id="audio-input" name="audio" accept="audio/*" required>
+      <audio id="audio-player" controls style="width: 100%; margin-top: 10px; display: none;"></audio>
+
+      <div style="margin-top: 18px;">
+        <label>2. Spoken Language Locale</label>
+        <select id="language-select" name="language">
+          <option value="en-US" selected>English (United States) - en-US</option>
+          <option value="en-GB">English (United Kingdom) - en-GB</option>
+          <option value="en-IN">English (India) - en-IN</option>
+          <option value="es-ES">Spanish (Spain) - es-ES</option>
+          <option value="fr-FR">French (France) - fr-FR</option>
+          <option value="de-DE">German (Germany) - de-DE</option>
+          <option value="ja-JP">Japanese - ja-JP</option>
+          <option value="zh-CN">Chinese (Mandarin) - zh-CN</option>
+        </select>
+      </div>
+
+      <button type="submit" id="btn-transcribe" class="btn btn-primary" style="width: 100%; margin-top: 24px;">
+        <span id="transcribe-text">Transcribe & Summarize Call 🎙️</span>
+        <span id="transcribe-spinner" class="spinner" style="display: none;"></span>
+      </button>
+    </form>
+  </div>
+
+  <!-- Right: Transcription & AI Summary -->
+  <div class="card" style="min-height: 480px; display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+      <h3 style="font-size: 1.1rem; font-weight: 700;">Transcript & Ticket Summary</h3>
+      <button id="btn-copy" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; display: none;">📋 Copy Transcript</button>
+    </div>
+
+    <div id="speech-placeholder" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); text-align: center; padding: 40px 20px;">
+      <div style="font-size: 40px; margin-bottom: 12px; opacity: 0.6;">🎧</div>
+      <p style="font-weight: 500;">No audio processed yet</p>
+      <p style="font-size: 0.85rem; margin-top: 4px;">Upload a support call recording to extract text and action items.</p>
+    </div>
+
+    <div id="speech-result" style="display: none;">
+      <div style="margin-bottom: 16px;">
+        <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Verbatim Audio Transcript</h4>
+        <div id="transcript-text" class="result-box" style="background: #f8fafc; font-size: 0.9rem; max-height: 180px; overflow-y: auto;"></div>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <h4 style="font-size: 0.9rem; font-weight: 700; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">AI Ticket Summary & Action Items</h4>
+        <div id="summary-text" class="result-box" style="background: #fdf4ff; border-color: #f0abfc; font-size: 0.9rem;"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const audioInput = document.getElementById('audio-input');
+  const audioPlayer = document.getElementById('audio-player');
+
+  audioInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      audioPlayer.src = URL.createObjectURL(file);
+      audioPlayer.style.display = 'block';
+    }
+  });
+
+  document.getElementById('speech-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!audioInput.files[0]) {
+      alert("Please select an audio file first.");
+      return;
+    }
+
+    const btnTranscribe = document.getElementById('btn-transcribe');
+    const transcribeText = document.getElementById('transcribe-text');
+    const transcribeSpinner = document.getElementById('transcribe-spinner');
+    const placeholder = document.getElementById('speech-placeholder');
+    const resultContainer = document.getElementById('speech-result');
+    const transcriptBox = document.getElementById('transcript-text');
+    const summaryBox = document.getElementById('summary-text');
+    const copyBtn = document.getElementById('btn-copy');
+
+    btnTranscribe.disabled = true;
+    transcribeText.innerText = 'Transcribing with Azure Speech...';
+    transcribeSpinner.style.display = 'inline-block';
+
+    const formData = new FormData();
+    formData.append('audio', audioInput.files[0]);
+    formData.append('language', document.getElementById('language-select').value);
+
+    try {
+      const res = await fetch('/api/voice-support', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        placeholder.style.display = 'none';
+        resultContainer.style.display = 'block';
+        transcriptBox.innerHTML = `<span style="color:var(--danger)">⚠️ Error: ${data.error}</span>`;
+        summaryBox.innerText = 'Summary unavailable due to transcription error.';
+      } else {
+        placeholder.style.display = 'none';
+        resultContainer.style.display = 'block';
+        transcriptBox.innerText = data.transcript || 'No spoken text detected in audio.';
+        summaryBox.innerText = data.summary || 'Summary unavailable.';
+        copyBtn.style.display = 'inline-block';
+      }
+    } catch (err) {
+      placeholder.style.display = 'none';
+      resultContainer.style.display = 'block';
+      transcriptBox.innerHTML = `<span style="color:var(--danger)">⚠️ Request failed: ${err.message}</span>`;
+    } finally {
+      btnTranscribe.disabled = false;
+      transcribeText.innerText = 'Transcribe & Summarize Call 🎙️';
+      transcribeSpinner.style.display = 'none';
+    }
+  });
+
+  document.getElementById('btn-copy').addEventListener('click', () => {
+    const text = document.getElementById('transcript-text').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('btn-copy');
+      btn.innerText = '✅ Copied!';
+      setTimeout(() => { btn.innerText = '📋 Copy Transcript'; }, 2000);
+    });
+  });
+</script>
+{% endblock %}

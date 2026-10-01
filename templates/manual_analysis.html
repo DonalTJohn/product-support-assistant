@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}User Manual & Invoice Ingestion • Product Support Assistant AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">User Manual & Invoice Document Intelligence</h1>
+  <p class="page-desc">Extract warranty clauses, specifications, serial numbers, and maintenance sections from uploaded PDF product manuals, receipts, or warranty slips.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: start;">
+  
+  <!-- Left: Upload Form -->
+  <div class="card">
+    <form id="doc-form">
+      <label>1. Upload PDF Manual, Invoice, or Warranty Card</label>
+      <input type="file" id="doc-input" name="file" accept="application/pdf,image/*" required>
+
+      <div style="margin-top: 18px;">
+        <label>2. Azure Content Understanding Analyzer</label>
+        <select id="analyzer-select" name="analyzer">
+          <option value="prebuilt-documentSearch" selected>prebuilt-documentSearch (General Manuals & Guides)</option>
+          <option value="prebuilt-layout">prebuilt-layout (Tables, Sections & Hierarchy)</option>
+          <option value="prebuilt-invoice">prebuilt-invoice (Purchase Invoices & Receipts)</option>
+        </select>
+      </div>
+
+      <button type="submit" id="btn-process" class="btn btn-primary" style="width: 100%; margin-top: 24px;">
+        <span id="process-text">Analyze Document 📑</span>
+        <span id="process-spinner" class="spinner" style="display: none;"></span>
+      </button>
+    </form>
+  </div>
+
+  <!-- Right: Extraction Results -->
+  <div class="card" style="min-height: 480px; display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+      <h3 style="font-size: 1.1rem; font-weight: 700;">Document Intelligence Output</h3>
+      <button id="btn-copy" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; display: none;">📋 Copy JSON</button>
+    </div>
+
+    <div id="doc-placeholder" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); text-align: center; padding: 40px 20px;">
+      <div style="font-size: 40px; margin-bottom: 12px; opacity: 0.6;">🗂️</div>
+      <p style="font-weight: 500;">No document analyzed yet</p>
+      <p style="font-size: 0.85rem; margin-top: 4px;">Upload a PDF or image file to run Azure Content Understanding.</p>
+    </div>
+
+    <pre id="doc-result" class="result-box" style="display: none; background: #0f172a; color: #38bdf8; font-family: 'Fira Code', monospace; font-size: 0.85rem; max-height: 420px; overflow-y: auto;"></pre>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const docInput = document.getElementById('doc-input');
+  const analyzerSelect = document.getElementById('analyzer-select');
+
+  document.getElementById('doc-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!docInput.files[0]) {
+      alert("Please select a file first.");
+      return;
+    }
+
+    const btnProcess = document.getElementById('btn-process');
+    const processText = document.getElementById('process-text');
+    const processSpinner = document.getElementById('process-spinner');
+    const placeholder = document.getElementById('doc-placeholder');
+    const resultBox = document.getElementById('doc-result');
+    const copyBtn = document.getElementById('btn-copy');
+
+    btnProcess.disabled = true;
+    processText.innerText = 'Extracting Document via Content Understanding...';
+    processSpinner.style.display = 'inline-block';
+
+    const formData = new FormData();
+    formData.append('file', docInput.files[0]);
+    formData.append('analyzer', analyzerSelect.value);
+
+    try {
+      const res = await fetch('/api/content-understanding', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      placeholder.style.display = 'none';
+      resultBox.style.display = 'block';
+
+      if (data.error) {
+        resultBox.style.color = '#f87171';
+        resultBox.innerText = `⚠️ Error: ${data.error}`;
+      } else {
+        resultBox.style.color = '#38bdf8';
+        resultBox.innerText = JSON.stringify(data.result, null, 2);
+        copyBtn.style.display = 'inline-block';
+      }
+    } catch (err) {
+      placeholder.style.display = 'none';
+      resultBox.style.display = 'block';
+      resultBox.style.color = '#f87171';
+      resultBox.innerText = `⚠️ Request failed: ${err.message}`;
+    } finally {
+      btnProcess.disabled = false;
+      processText.innerText = 'Analyze Document 📑';
+      processSpinner.style.display = 'none';
+    }
+  });
+
+  document.getElementById('btn-copy').addEventListener('click', () => {
+    const text = document.getElementById('doc-result').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('btn-copy');
+      btn.innerText = '✅ Copied!';
+      setTimeout(() => { btn.innerText = '📋 Copy JSON'; }, 2000);
+    });
+  });
+</script>
+{% endblock %}

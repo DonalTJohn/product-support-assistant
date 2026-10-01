@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard • Product Support Assistant AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Product Support Intelligence Suite</h1>
+  <p class="page-desc">Comprehensive AI-powered tools for customer service reps, field engineers, and support automation.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px;">
+
+  <!-- Card 1: Support Chat -->
+  <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 22px;">💬</div>
+        <span class="chip" style="color: #2563eb; background: #eff6ff;">Conversational AI</span>
+      </div>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px;">Customer Support Chat</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+        Empathetic, multi-turn AI assistant capable of troubleshooting hardware/software, checking warranty policies, and answering FAQ inquiries.
+      </p>
+    </div>
+    <a href="/chat" class="btn btn-primary" style="width: 100%;">Launch Chatbot →</a>
+  </div>
+
+  <!-- Card 2: Ticket Analysis -->
+  <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #fdf4ff; color: #a855f7; display: flex; align-items: center; justify-content: center; font-size: 22px;">📊</div>
+        <span class="chip" style="color: #a855f7; background: #fdf4ff;">NLP Triage</span>
+      </div>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px;">Ticket Intelligence & Triage</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+        Extract category, urgency SLA, customer sentiment/frustration score, error codes, and generate an automated customer reply draft.
+      </p>
+    </div>
+    <a href="/ticket-analysis" class="btn btn-primary" style="width: 100%;">Analyze Tickets →</a>
+  </div>
+
+  <!-- Card 3: Visual Troubleshoot -->
+  <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #f0fdf4; color: #16a34a; display: flex; align-items: center; justify-content: center; font-size: 22px;">📷</div>
+        <span class="chip" style="color: #16a34a; background: #f0fdf4;">Multimodal Vision</span>
+      </div>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px;">Visual Defect Diagnostics</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+        Upload photos of broken ports, PCB burns, error screens, or physical damage. AI detects defects, safety hazards, and repair procedures.
+      </p>
+    </div>
+    <a href="/visual-troubleshoot" class="btn btn-primary" style="width: 100%;">Inspect Photo →</a>
+  </div>
+
+  <!-- Card 4: Voice Support -->
+  <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #fff7ed; color: #ea580c; display: flex; align-items: center; justify-content: center; font-size: 22px;">🎙️</div>
+        <span class="chip" style="color: #ea580c; background: #fff7ed;">Azure Speech REST</span>
+      </div>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px;">Voicemail & Call Transcriber</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+        Convert customer phone audio and voicemails into accurate transcripts with auto-generated issue summaries and action item checklists.
+      </p>
+    </div>
+    <a href="/voice-support" class="btn btn-primary" style="width: 100%;">Transcribe Audio →</a>
+  </div>
+
+  <!-- Card 5: Manual Analysis -->
+  <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #fef2f2; color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 22px;">📄</div>
+        <span class="chip" style="color: #dc2626; background: #fef2f2;">Doc Understanding</span>
+      </div>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px;">Manuals & Invoice Reader</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+        Ingest product user manuals, purchase receipts, and warranty slips to quickly retrieve maintenance guidelines and verify coverage.
+      </p>
+    </div>
+    <a href="/manual-analysis" class="btn btn-primary" style="width: 100%;">Process Document →</a>
+  </div>
+
+  <!-- Card 6: Support Agent -->
+  <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: #f5f3ff; color: #7c3aed; display: flex; align-items: center; justify-content: center; font-size: 22px;">🛡️</div>
+        <span class="chip" style="color: #7c3aed; background: #f5f3ff;">Agentic Workflow</span>
+      </div>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px;">Tier-2 Escalation Agent</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+        Diagnostic agent that evaluates product context, checks warranty validity, and generates official Tier-2 engineering escalation tickets.
+      </p>
+    </div>
+    <a href="/support-agent" class="btn btn-primary" style="width: 100%;">Run Escalation Agent →</a>
+  </div>
+
+</div>
+
+<!-- System Health Widget -->
+<div class="card" style="margin-top: 32px; background: #0f172a; color: white; border: 1px solid #1e293b;">
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+    <div>
+      <h3 style="font-size: 1.1rem; font-weight: 700;">Azure AI Environment Health</h3>
+      <p style="font-size: 0.85rem; color: #94a3b8;">Verifying active model deployments, Speech service, and Content Understanding connectivity.</p>
+    </div>
+    <button id="btn-check-health" class="btn btn-secondary" style="background: #1e293b; color: white; border-color: #334155; font-size: 0.85rem; padding: 8px 16px;">
+      Check Status 🔄
+    </button>
+  </div>
+  <div id="health-output" style="margin-top: 16px; font-family: 'Fira Code', monospace; font-size: 0.85rem; background: #020617; padding: 14px; border-radius: 8px; border: 1px solid #1e293b; display: none;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('btn-check-health').addEventListener('click', async () => {
+    const out = document.getElementById('health-output');
+    out.style.display = 'block';
+    out.innerHTML = '<span style="color:#38bdf8;">Checking Azure services...</span>';
+    try {
+      const res = await fetch('/health');
+      const data = await res.json();
+      out.innerHTML = `<span style="color:#4ade80;">● System Operational:</span>\n` + JSON.stringify(data, null, 2);
+    } catch (e) {
+      out.innerHTML = `<span style="color:#f87171;">Error: ${e.message}</span>`;
+    }
+  });
+</script>
+{% endblock %}

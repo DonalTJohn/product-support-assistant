@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Tier-2 Diagnostic & Escalation Agent • Product Support Assistant AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Automated Escalation & Diagnostic Agent</h1>
+  <p class="page-desc">Simulates an intelligent Tier-2 support engineer. Evaluates warranty eligibility, attempts deep diagnostic isolation, and creates formal Engineering Escalation Tickets.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: start;">
+  
+  <!-- Left: Product Context & Symptom Details -->
+  <div class="card">
+    <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Product Diagnostic Context</h3>
+    
+    <form id="agent-form">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+        <div>
+          <label>Product Model</label>
+          <input type="text" id="product-model" placeholder="e.g. SmartHub Ultra 4K" value="SmartHub Ultra 4K">
+        </div>
+        <div>
+          <label>Serial / IMEI Number</label>
+          <input type="text" id="serial-number" placeholder="e.g. SN-88392-AX" value="SN-88392-AX">
+        </div>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label>Purchase Date (for Warranty Calculation)</label>
+        <input type="date" id="purchase-date" value="2026-03-15">
+      </div>
+
+      <div>
+        <label>Diagnostic Symptoms & Steps Already Attempted</label>
+        <textarea id="agent-message" rows="7" placeholder="Describe the failure mode, LED blink codes, power supply checks, and what steps were attempted..." required>Device failed during automated firmware flash. Main LED is stuck on solid amber. Power cycling with 30s capacitor discharge did not recover the bootloader. UART debug port is not outputting any serial stream.</textarea>
+      </div>
+
+      <button type="submit" id="btn-agent" class="btn btn-primary" style="width: 100%; margin-top: 20px;">
+        <span id="agent-text">Run Diagnostic & Generate Escalation Ticket 🛡️</span>
+        <span id="agent-spinner" class="spinner" style="display: none;"></span>
+      </button>
+    </form>
+  </div>
+
+  <!-- Right: Escalation Ticket Output -->
+  <div class="card" style="min-height: 520px; display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+      <h3 style="font-size: 1.1rem; font-weight: 700;">Tier-2 Escalation Ticket</h3>
+      <button id="btn-copy" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; display: none;">📋 Copy Ticket</button>
+    </div>
+
+    <div id="agent-placeholder" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); text-align: center; padding: 40px 20px;">
+      <div style="font-size: 40px; margin-bottom: 12px; opacity: 0.6;">📋</div>
+      <p style="font-weight: 500;">No escalation generated yet</p>
+      <p style="font-size: 0.85rem; margin-top: 4px;">Fill in the product details and click to run deep diagnostic assessment.</p>
+    </div>
+
+    <div id="agent-result" class="result-box" style="display: none; background: #ffffff; border: none; padding: 0;"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('agent-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('agent-message').value.trim();
+    if (!msg) return;
+
+    const btnAgent = document.getElementById('btn-agent');
+    const agentText = document.getElementById('agent-text');
+    const agentSpinner = document.getElementById('agent-spinner');
+    const placeholder = document.getElementById('agent-placeholder');
+    const resultBox = document.getElementById('agent-result');
+    const copyBtn = document.getElementById('btn-copy');
+
+    btnAgent.disabled = true;
+    agentText.innerText = 'Evaluating Diagnostics & SLA...';
+    agentSpinner.style.display = 'inline-block';
+
+    const payload = {
+      message: msg,
+      product_model: document.getElementById('product-model').value,
+      serial_number: document.getElementById('serial-number').value,
+      purchase_date: document.getElementById('purchase-date').value
+    };
+
+    try {
+      const res = await fetch('/api/support-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      placeholder.style.display = 'none';
+      resultBox.style.display = 'block';
+
+      if (data.error) {
+        resultBox.innerHTML = `<span style="color:var(--danger)">⚠️ Error: ${data.error}</span>`;
+      } else {
+        resultBox.innerText = data.reply;
+        copyBtn.style.display = 'inline-block';
+      }
+    } catch (err) {
+      placeholder.style.display = 'none';
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `<span style="color:var(--danger)">⚠️ Request failed: ${err.message}</span>`;
+    } finally {
+      btnAgent.disabled = false;
+      agentText.innerText = 'Run Diagnostic & Generate Escalation Ticket 🛡️';
+      agentSpinner.style.display = 'none';
+    }
+  });
+
+  document.getElementById('btn-copy').addEventListener('click', () => {
+    const text = document.getElementById('agent-result').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('btn-copy');
+      btn.innerText = '✅ Copied!';
+      setTimeout(() => { btn.innerText = '📋 Copy Ticket'; }, 2000);
+    });
+  });
+</script>
+{% endblock %}

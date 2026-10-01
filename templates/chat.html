@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Support Chat • Product Support Assistant AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Customer Support Assistant</h1>
+  <p class="page-desc">Empathetic, multi-turn AI product support specialist for technical troubleshooting and policy guidance.</p>
+</div>
+
+<div class="card" style="padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 680px;">
+  <!-- Chat Header -->
+  <div style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></div>
+      <div>
+        <div style="font-weight: 700; font-size: 0.95rem;">ApexSupport AI Agent</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Trained on Hardware, Firmware & Warranty SLAs</div>
+      </div>
+    </div>
+    <button id="btn-clear" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">Clear Chat</button>
+  </div>
+
+  <!-- Chat Log -->
+  <div id="chat-box" style="flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; background: #ffffff;">
+    <div style="display: flex; gap: 12px; align-items: flex-start; max-width: 80%;">
+      <div style="width: 34px; height: 34px; border-radius: 50%; background: var(--accent-gradient); color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;">⚡</div>
+      <div style="background: #f1f5f9; padding: 14px 18px; border-radius: 16px; border-top-left-radius: 4px; font-size: 0.95rem; line-height: 1.5;">
+        Hello! I'm your Product Support Specialist. How can I help you with your product today? Feel free to describe any hardware issues, error codes, or ask about warranty & returns.
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Prompts -->
+  <div style="padding: 8px 24px; background: #f8fafc; border-top: 1px solid var(--border-color); display: flex; gap: 8px; overflow-x: auto;">
+    <span class="chip prompt-chip">Device won't power on</span>
+    <span class="chip prompt-chip">Firmware update error 0x800</span>
+    <span class="chip prompt-chip">How do I claim a warranty replacement?</span>
+    <span class="chip prompt-chip">Product overheating during operation</span>
+  </div>
+
+  <!-- Input Form -->
+  <form id="chat-form" style="padding: 16px 24px; background: #ffffff; border-top: 1px solid var(--border-color); display: flex; gap: 12px; align-items: center;">
+    <input type="text" id="user-input" placeholder="Type your product issue or question here..." required autocomplete="off" style="margin: 0; flex: 1;">
+    <button type="submit" id="btn-send" class="btn btn-primary" style="padding: 12px 22px;">
+      <span>Send</span>
+      <span id="send-spinner" class="spinner" style="display: none;"></span>
+    </button>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const chatBox = document.getElementById('chat-box');
+  const chatForm = document.getElementById('chat-form');
+  const userInput = document.getElementById('user-input');
+  const btnSend = document.getElementById('btn-send');
+  const sendSpinner = document.getElementById('send-spinner');
+  const btnClear = document.getElementById('btn-clear');
+  
+  let history = [];
+
+  function appendMessage(role, text) {
+    const isUser = role === 'user';
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.gap = '12px';
+    wrapper.style.alignItems = 'flex-start';
+    wrapper.style.maxWidth = '80%';
+    if (isUser) {
+      wrapper.style.marginLeft = 'auto';
+      wrapper.style.flexDirection = 'row-reverse';
+    }
+
+    const avatar = document.createElement('div');
+    avatar.style.width = '34px';
+    avatar.style.height = '34px';
+    avatar.style.borderRadius = '50%';
+    avatar.style.display = 'flex';
+    avatar.style.alignItems = 'center';
+    avatar.style.justifyContent = 'center';
+    avatar.style.fontSize = '14px';
+    avatar.style.flexShrink = '0';
+
+    if (isUser) {
+      avatar.style.background = '#0f172a';
+      avatar.style.color = 'white';
+      avatar.innerText = '👤';
+    } else {
+      avatar.style.background = 'var(--accent-gradient)';
+      avatar.style.color = 'white';
+      avatar.innerText = '⚡';
+    }
+
+    const bubble = document.createElement('div');
+    bubble.style.padding = '14px 18px';
+    bubble.style.borderRadius = '16px';
+    bubble.style.fontSize = '0.95rem';
+    bubble.style.lineHeight = '1.6';
+    bubble.style.whiteSpace = 'pre-wrap';
+
+    if (isUser) {
+      bubble.style.background = 'var(--primary)';
+      bubble.style.color = 'white';
+      bubble.style.borderTopRightRadius = '4px';
+    } else {
+      bubble.style.background = '#f1f5f9';
+      bubble.style.color = 'var(--text-main)';
+      bubble.style.borderTopLeftRadius = '4px';
+    }
+
+    bubble.innerText = text;
+
+    wrapper.appendChild(avatar);
+    wrapper.appendChild(bubble);
+    chatBox.appendChild(wrapper);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  document.querySelectorAll('.prompt-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      userInput.value = chip.innerText;
+      userInput.focus();
+    });
+  });
+
+  btnClear.addEventListener('click', () => {
+    chatBox.innerHTML = '';
+    history = [];
+    appendMessage('assistant', "Hello! I'm your Product Support Specialist. How can I help you with your product today?");
+  });
+
+  chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = userInput.value.trim();
+    if (!msg) return;
+
+    appendMessage('user', msg);
+    userInput.value = '';
+    userInput.disabled = true;
+    btnSend.disabled = true;
+    sendSpinner.style.display = 'inline-block';
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, history: history })
+      });
+      const data = await res.json();
+      if (data.error) {
+        appendMessage('assistant', `⚠️ Error: ${data.error}`);
+      } else {
+        appendMessage('assistant', data.reply);
+        history.push({ role: 'user', content: msg });
+        history.push({ role: 'assistant', content: data.reply });
+      }
+    } catch (err) {
+      appendMessage('assistant', `⚠️ Connection Error: ${err.message}`);
+    } finally {
+      userInput.disabled = false;
+      btnSend.disabled = false;
+      sendSpinner.style.display = 'none';
+      userInput.focus();
+    }
+  });
+</script>
+{% endblock %}
