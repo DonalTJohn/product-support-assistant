@@ -1,10 +1,22 @@
 import os
+import time
 import base64
 import uuid
+import json
+import sqlite3
+import datetime
 import requests
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
 from dotenv import load_dotenv
 from openai import OpenAI
+
+# Azure Speech SDK is optional – the REST API is used instead for Render compatibility
+try:
+    import azure.cognitiveservices.speech as speechsdk
+    _SPEECH_SDK_AVAILABLE = True
+except Exception:
+    speechsdk = None
+    _SPEECH_SDK_AVAILABLE = False
 
 load_dotenv()
 
@@ -13,6 +25,33 @@ app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024  # 30MB max upload
 
 # Ensure uploads folder exists
 os.makedirs(os.path.join(os.path.dirname(__file__), "uploads"), exist_ok=True)
+
+# Database Initialization
+DB_PATH = os.path.join(os.path.dirname(__file__), "support_tickets.db")
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_id TEXT UNIQUE,
+            customer_name TEXT,
+            product_model TEXT,
+            category TEXT,
+            priority TEXT,
+            sentiment TEXT,
+            summary TEXT,
+            details TEXT,
+            status TEXT DEFAULT 'Open',
+            source TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # Azure OpenAI / Foundry Configuration
 AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
@@ -100,6 +139,58 @@ def api_chat():
         return jsonify(error=str(e)), 500
 
 
+@app.post("/api/chat/stream")
+def api_chat_stream():
+    """Real-time token streaming using Server-Sent Events (SSE)."""
+    try:
+        data = request.json or {}
+        message = data.get("message", "").strip()
+        history = data.get("history", [])
+
+        if not message:
+            return jsonify(error="Please enter a customer question or inquiry."), 400
+
+        system_instruction = (
+            "You are 'ApexSupport AI', an empathetic, highly skilled, and professional senior product support specialist. "
+            "Deliver structured, step-by-step troubleshooting instructions using clean markdown formatting, lists, and bold callouts."
+        )
+
+        messages = [{"role": "system", "content": system_instruction}]
+        for h in history[-6:]:
+            role = h.get("role", "user")
+            content = h.get("content", "")
+            if role in ["user", "assistant"] and content:
+                messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": message})
+
+        client = get_openai_client()
+
+        def generate():
+            try:
+                response = client.chat.completions.create(
+                    model=TEXT_MODEL,
+                    messages=messages,
+                    stream=True
+                )
+                for chunk in response:
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            yield f"data: {json.dumps({'token': delta})}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as ex:
+                try:
+                    full_text = text_response(message, system=system_instruction)
+                    yield f"data: {json.dumps({'token': full_text})}\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception as inner_ex:
+                    yield f"data: {json.dumps({'error': str(inner_ex)})}\n\n"
+
+        return Response(stream_with_context(generate()), content_type="text/event-stream")
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
 # 2. Ticket & Feedback Sentiment / Text Analysis
 @app.get("/ticket-analysis")
 def ticket_analysis():
@@ -149,7 +240,26 @@ CUSTOMER TICKET TEXT:
 {ticket_text}"""
 
         analysis_result = text_response(prompt, system=system_prompt)
-        return jsonify(result=analysis_result)
+
+        # Auto-persist to SQLite Ticket DB
+        try:
+            ticket_id = f"TCK-{uuid.uuid4().hex[:6].upper()}"
+            priority = "High" if "Critical" in analysis_result or "High" in analysis_result else "Medium"
+            category = "Hardware/Firmware"
+            summary_snippet = ticket_text[:140] + "..." if len(ticket_text) > 140 else ticket_text
+            
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO tickets (ticket_id, category, priority, sentiment, summary, details, source, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (ticket_id, category, priority, "Analyzed", summary_snippet, analysis_result, "Ticket Triage", "Open"))
+            conn.commit()
+            conn.close()
+        except Exception:
+            ticket_id = None
+
+        return jsonify(result=analysis_result, saved_ticket_id=ticket_id)
     except Exception as e:
         return jsonify(error=str(e)), 500
 
@@ -222,40 +332,83 @@ def voice_support():
 
 @app.post("/api/voice-support")
 def api_voice_support():
+    """Transcribe audio using Azure Speech-to-Text REST API (no native SDK required)."""
+    temp_path = None
     try:
         file = request.files.get("audio")
         if not file:
-            return jsonify(error="Please upload a valid audio recording (.wav, .mp3, .m4a, .ogg)."), 400
+            return jsonify(error="Please upload or record an audio file (.wav, .mp3, .m4a, .ogg)."), 400
 
-        if not SPEECH_KEY or not SPEECH_ENDPOINT:
-            return jsonify(error="Azure Speech Service endpoint or key is not configured in .env."), 400
+        if not SPEECH_KEY:
+            return jsonify(error="Azure Speech Service key (SPEECH_API_KEY) is not configured in .env."), 400
 
         language = request.form.get("language", "en-US")
-        url = f"{SPEECH_ENDPOINT}/speechtotext/v3.2/transcriptions:transcribe?api-version=2024-11-15"
-        headers = {"Ocp-Apim-Subscription-Key": SPEECH_KEY}
-        files = {"audio": (file.filename, file.stream, file.mimetype or "audio/wav")}
-        data = {"definition": f'{{"locales":["{language}"],"profanityFilterMode":"Masked"}}'}
 
-        speech_req = requests.post(url, headers=headers, files=files, data=data, timeout=120)
-        
-        if not speech_req.ok:
-            return jsonify(error=f"Azure Speech Service returned status {speech_req.status_code}: {speech_req.text}"), speech_req.status_code
+        # Save uploaded audio to a temp file
+        ext = os.path.splitext(file.filename or "")[1].lower() or ".wav"
+        temp_name = f"temp_audio_{uuid.uuid4().hex}{ext}"
+        temp_path = os.path.join(os.path.dirname(__file__), "uploads", temp_name)
+        file.save(temp_path)
 
-        speech_data = speech_req.json()
-        
-        # Extract transcribed text phrases
-        phrases = []
-        combined_phrases = speech_data.get("combinedPhrases", [])
-        if combined_phrases:
-            for item in combined_phrases:
-                if "text" in item:
-                    phrases.append(item["text"])
-        
-        full_transcript = " ".join(phrases) if phrases else "Audio transcribed successfully (see raw payload)."
+        # --- Azure Speech-to-Text via REST API ---
+        # Derive the STT REST endpoint from SPEECH_ENDPOINT or SPEECH_REGION
+        if SPEECH_ENDPOINT:
+            # Custom endpoint format: https://<region>.api.cognitive.microsoft.com
+            stt_base = SPEECH_ENDPOINT.rstrip("/")
+        else:
+            stt_base = f"https://{SPEECH_REGION}.stt.speech.microsoft.com"
 
-        # If transcript extracted, generate an automated ticket summary using AI
+        stt_url = (
+            f"{stt_base}/speech/recognition/conversation/cognitiveservices/v1"
+            f"?language={language}&format=detailed"
+        )
+
+        # Determine content-type based on file extension
+        content_type_map = {
+            ".wav": "audio/wav; codecs=audio/pcm; samplerate=16000",
+            ".mp3": "audio/mpeg",
+            ".ogg": "audio/ogg; codecs=opus",
+            ".m4a": "audio/aac",
+            ".flac": "audio/flac",
+        }
+        content_type = content_type_map.get(ext, "audio/wav; codecs=audio/pcm; samplerate=16000")
+
+        headers = {
+            "Ocp-Apim-Subscription-Key": SPEECH_KEY,
+            "Content-Type": content_type,
+            "Accept": "application/json",
+        }
+
+        with open(temp_path, "rb") as audio_file:
+            stt_response = requests.post(stt_url, headers=headers, data=audio_file, timeout=60)
+
+        full_transcript = ""
+        if stt_response.ok:
+            stt_data = stt_response.json()
+            # 'RecognitionStatus' == 'Success' means speech was found
+            status = stt_data.get("RecognitionStatus", "")
+            if status == "Success":
+                # Prefer the NBest DisplayText (highest confidence)
+                nbest = stt_data.get("NBest", [])
+                if nbest:
+                    full_transcript = nbest[0].get("Display", stt_data.get("DisplayText", ""))
+                else:
+                    full_transcript = stt_data.get("DisplayText", "")
+            elif status in ("NoMatch", "InitialSilenceTimeout", "BabbleTimeout"):
+                full_transcript = "Audio received, but no clear spoken words were recognized."
+            else:
+                full_transcript = f"Speech recognition returned status: {status}"
+        else:
+            raise RuntimeError(
+                f"Azure Speech REST API error {stt_response.status_code}: {stt_response.text[:300]}"
+            )
+
+        if not full_transcript:
+            full_transcript = "Audio received, but no clear spoken words were recognized."
+
+        # Generate an AI ticket summary from the transcript
         ticket_summary = ""
-        if full_transcript and full_transcript != "Audio transcribed successfully (see raw payload).":
+        if full_transcript and "no clear spoken words" not in full_transcript:
             ai_summary_prompt = f"""Analyze this transcribed customer support call/voicemail and generate:
 1. Customer Problem Summary (2-3 sentences)
 2. Customer Sentiment during the call
@@ -268,13 +421,15 @@ TRANSCRIPT:
             except Exception:
                 ticket_summary = "AI summary generation skipped."
 
-        return jsonify(
-            transcript=full_transcript,
-            summary=ticket_summary,
-            raw_response=speech_data
-        )
+        return jsonify(transcript=full_transcript, summary=ticket_summary)
     except Exception as e:
         return jsonify(error=str(e)), 500
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
 
 # 5. User Manual & Invoice / Warranty Document Understanding
@@ -326,10 +481,12 @@ def api_support_agent():
         if not message:
             return jsonify(error="Please provide issue symptoms or diagnostic response."), 400
 
+        ticket_id = f"T2-ENG-{uuid.uuid4().hex[:6].upper()}"
+
         system_prompt = (
             "You are the 'Senior Diagnostic & Tier-2 Escalation Specialist'. "
             "Your job is to guide customers through deep technical diagnostics, evaluate warranty eligibility, "
-            "isolate root causes, and when necessary, generate an official, structured Tier-2 Engineering Escalation Ticket."
+            "isolate root causes, and generate an official, structured Tier-2 Engineering Escalation Ticket."
         )
 
         agent_prompt = f"""PRODUCT CONTEXT:
@@ -343,15 +500,66 @@ CUSTOMER INPUT / DIAGNOSTIC RESPONSE:
 INSTRUCTIONS:
 1. Provide a step-by-step diagnostic evaluation.
 2. If the problem is unresolved, create a formal [TIER-2 ESCALATION TICKET] with:
-   - Ticket ID (auto-generate e.g. T2-SUP-XXXXX)
+   - Ticket ID: {ticket_id}
    - Severity & Priority
    - Warranty Status Evaluation (based on purchase date or typical 1-year standard warranty)
    - Steps Already Attempted
    - Specific Engineering Action Required
-3. Keep the output clean, structured, and easy for both customer and Tier-2 engineers to read."""
+3. Keep the output clean, structured with markdown tables and bullet points."""
 
         reply = text_response(agent_prompt, system=system_prompt)
-        return jsonify(reply=reply)
+
+        # Persist escalation to SQLite DB
+        try:
+            priority = "Critical" if ("Critical" in reply or "Hazard" in reply) else "High"
+            summary_snippet = f"{product_model or 'Hardware'}: {message[:100]}..."
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO tickets (ticket_id, product_model, category, priority, sentiment, summary, details, source, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (ticket_id, product_model, "Tier-2 Escalation", priority, "Escalated", summary_snippet, reply, "Escalation Agent", "Escalated"))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+        return jsonify(reply=reply, ticket_id=ticket_id)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+# 7. Ticket Management & History Dashboard
+@app.get("/tickets")
+def tickets_page():
+    return render_template("tickets.html")
+
+
+@app.get("/api/tickets")
+def get_tickets():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM tickets ORDER BY created_at DESC")
+        rows = [dict(row) for row in c.fetchall()]
+        conn.close()
+        return jsonify(tickets=rows)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.post("/api/tickets/<ticket_id>/status")
+def update_ticket_status(ticket_id):
+    try:
+        data = request.json or {}
+        new_status = data.get("status", "Open")
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("UPDATE tickets SET status = ? WHERE ticket_id = ?", (new_status, ticket_id))
+        conn.commit()
+        conn.close()
+        return jsonify(success=True, ticket_id=ticket_id, status=new_status)
     except Exception as e:
         return jsonify(error=str(e)), 500
 
