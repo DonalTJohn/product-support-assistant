@@ -351,11 +351,13 @@ def api_voice_support():
         file.save(temp_path)
 
         # --- Azure Speech-to-Text via REST API ---
-        # Derive the STT REST endpoint from SPEECH_ENDPOINT or SPEECH_REGION
-        if SPEECH_ENDPOINT:
-            # Custom endpoint format: https://<region>.api.cognitive.microsoft.com
+        # The STT REST endpoint is always region-based: https://<region>.stt.speech.microsoft.com
+        # SPEECH_ENDPOINT in .env may be a generic Cognitive Services URL — don't use it as the STT base.
+        # Only use SPEECH_ENDPOINT if it already points to the correct speech STT host.
+        if SPEECH_ENDPOINT and "stt.speech.microsoft.com" in SPEECH_ENDPOINT:
             stt_base = SPEECH_ENDPOINT.rstrip("/")
         else:
+            # Always derive from region — this is the correct Azure STT REST endpoint
             stt_base = f"https://{SPEECH_REGION}.stt.speech.microsoft.com"
 
         stt_url = (
