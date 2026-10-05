@@ -67,7 +67,7 @@
     wrapper.style.display = 'flex';
     wrapper.style.gap = '12px';
     wrapper.style.alignItems = 'flex-start';
-    wrapper.style.maxWidth = '80%';
+    wrapper.style.maxWidth = '85%';
     if (isUser) {
       wrapper.style.marginLeft = 'auto';
       wrapper.style.flexDirection = 'row-reverse';
@@ -94,28 +94,29 @@
     }
 
     const bubble = document.createElement('div');
+    bubble.className = 'markdown-body';
     bubble.style.padding = '14px 18px';
     bubble.style.borderRadius = '16px';
     bubble.style.fontSize = '0.95rem';
     bubble.style.lineHeight = '1.6';
-    bubble.style.whiteSpace = 'pre-wrap';
 
     if (isUser) {
       bubble.style.background = 'var(--primary)';
       bubble.style.color = 'white';
       bubble.style.borderTopRightRadius = '4px';
+      bubble.innerText = text;
     } else {
       bubble.style.background = '#f1f5f9';
       bubble.style.color = 'var(--text-main)';
       bubble.style.borderTopLeftRadius = '4px';
+      bubble.innerHTML = window.marked ? marked.parse(text) : text;
     }
-
-    bubble.innerText = text;
 
     wrapper.appendChild(avatar);
     wrapper.appendChild(bubble);
     chatBox.appendChild(wrapper);
     chatBox.scrollTop = chatBox.scrollHeight;
+    return bubble;
   }
 
   document.querySelectorAll('.prompt-chip').forEach(chip => {
@@ -142,22 +143,63 @@
     btnSend.disabled = true;
     sendSpinner.style.display = 'inline-block';
 
+    const assistantBubble = appendMessage('assistant', '...');
+    let accumulatedText = '';
+
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg, history: history })
       });
-      const data = await res.json();
-      if (data.error) {
-        appendMessage('assistant', `⚠️ Error: ${data.error}`);
-      } else {
-        appendMessage('assistant', data.reply);
-        history.push({ role: 'user', content: msg });
-        history.push({ role: 'assistant', content: data.reply });
+
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
       }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop(); // Keep incomplete chunk
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.replace('data: ', '').trim();
+            if (dataStr === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.token) {
+                accumulatedText += parsed.token;
+                assistantBubble.innerHTML = window.marked ? marked.parse(accumulatedText) : accumulatedText;
+                chatBox.scrollTop = chatBox.scrollHeight;
+              } else if (parsed.error) {
+                accumulatedText += `\n\n⚠️ Error: ${parsed.error}`;
+                assistantBubble.innerHTML = window.marked ? marked.parse(accumulatedText) : accumulatedText;
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          }
+        }
+      }
+
+      if (!accumulatedText) {
+        accumulatedText = "I have received your inquiry.";
+        assistantBubble.innerHTML = accumulatedText;
+      }
+
+      history.push({ role: 'user', content: msg });
+      history.push({ role: 'assistant', content: accumulatedText });
+
     } catch (err) {
-      appendMessage('assistant', `⚠️ Connection Error: ${err.message}`);
+      assistantBubble.innerHTML = `<span style="color:var(--danger)">⚠️ Connection failed: ${err.message}</span>`;
     } finally {
       userInput.disabled = false;
       btnSend.disabled = false;
@@ -166,4 +208,5 @@
     }
   });
 </script>
+
 {% endblock %}

@@ -5,20 +5,37 @@
 {% block content %}
 <div class="page-header">
   <h1 class="page-title">Voice-to-Text Support Call & Voicemail Transcriber</h1>
-  <p class="page-desc">Upload recorded customer calls or audio voicemails. Converts audio to text via Azure Speech Service and auto-generates structured ticket action items.</p>
+  <p class="page-desc">Record voice memos directly via your microphone or upload audio files. Transcribes via Azure Speech and auto-generates structured action items.</p>
 </div>
 
 <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: start;">
   
-  <!-- Left: Audio Upload Form -->
+  <!-- Left: Audio Upload & In-Browser Mic Recording -->
   <div class="card">
+    
+    <!-- Option A: In-Browser Mic Recorder -->
+    <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; margin-bottom: 20px;">
+      <label style="margin-bottom: 6px; font-weight: 700; color: #0f172a;">🎙️ Option A: Live Microphone Recording</label>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Speak your customer support issue directly into your microphone.</p>
+      
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <button type="button" id="btn-record" class="btn" style="background: #ef4444; color: white; padding: 9px 18px; font-size: 0.85rem;">
+          <span id="record-dot" style="display: inline-block; width: 8px; height: 8px; background: white; border-radius: 50%; margin-right: 6px;"></span>
+          <span id="record-btn-text">Start Recording</span>
+        </button>
+        <span id="record-timer" style="font-family: 'Fira Code', monospace; font-size: 0.9rem; font-weight: 600; color: #ef4444; display: none;">00:00</span>
+      </div>
+      <div id="mic-status" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px;"></div>
+    </div>
+
+    <!-- Option B: File Upload -->
     <form id="speech-form">
-      <label>1. Select Audio Recording (.wav, .mp3, .m4a, .ogg)</label>
-      <input type="file" id="audio-input" name="audio" accept="audio/*" required>
+      <label style="font-weight: 700;">📁 Option B: Upload Recorded Audio File</label>
+      <input type="file" id="audio-input" name="audio" accept="audio/*">
       <audio id="audio-player" controls style="width: 100%; margin-top: 10px; display: none;"></audio>
 
       <div style="margin-top: 18px;">
-        <label>2. Spoken Language Locale</label>
+        <label>Language Locale</label>
         <select id="language-select" name="language">
           <option value="en-US" selected>English (United States) - en-US</option>
           <option value="en-GB">English (United Kingdom) - en-GB</option>
@@ -32,7 +49,7 @@
       </div>
 
       <button type="submit" id="btn-transcribe" class="btn btn-primary" style="width: 100%; margin-top: 24px;">
-        <span id="transcribe-text">Transcribe & Summarize Call 🎙️</span>
+        <span id="transcribe-text">Transcribe & Summarize Audio ⚡</span>
         <span id="transcribe-spinner" class="spinner" style="display: none;"></span>
       </button>
     </form>
@@ -48,7 +65,7 @@
     <div id="speech-placeholder" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); text-align: center; padding: 40px 20px;">
       <div style="font-size: 40px; margin-bottom: 12px; opacity: 0.6;">🎧</div>
       <p style="font-weight: 500;">No audio processed yet</p>
-      <p style="font-size: 0.85rem; margin-top: 4px;">Upload a support call recording to extract text and action items.</p>
+      <p style="font-size: 0.85rem; margin-top: 4px;">Record via mic or upload a support recording to extract text & action items.</p>
     </div>
 
     <div id="speech-result" style="display: none;">
@@ -59,7 +76,7 @@
 
       <div style="margin-top: 16px;">
         <h4 style="font-size: 0.9rem; font-weight: 700; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">AI Ticket Summary & Action Items</h4>
-        <div id="summary-text" class="result-box" style="background: #fdf4ff; border-color: #f0abfc; font-size: 0.9rem;"></div>
+        <div id="summary-text" class="result-box markdown-body" style="background: #fdf4ff; border-color: #f0abfc; font-size: 0.9rem;"></div>
       </div>
     </div>
   </div>
@@ -71,10 +88,67 @@
 <script>
   const audioInput = document.getElementById('audio-input');
   const audioPlayer = document.getElementById('audio-player');
+  const btnRecord = document.getElementById('btn-record');
+  const recordBtnText = document.getElementById('record-btn-text');
+  const recordTimer = document.getElementById('record-timer');
+  const micStatus = document.getElementById('mic-status');
+
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let recordInterval = null;
+  let recordedBlob = null;
+  let secondsElapsed = 0;
+
+  // Live Mic Recording
+  btnRecord.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      clearInterval(recordInterval);
+      recordBtnText.innerText = 'Record Again';
+      btnRecord.style.background = '#2563eb';
+      micStatus.innerText = 'Recording saved! Ready to transcribe.';
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        recordedBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        audioPlayer.src = URL.createObjectURL(recordedBlob);
+        audioPlayer.style.display = 'block';
+      };
+
+      mediaRecorder.start();
+      secondsElapsed = 0;
+      recordTimer.style.display = 'inline-block';
+      recordTimer.innerText = '00:00';
+      recordBtnText.innerText = 'Stop Recording';
+      btnRecord.style.background = '#b91c1c';
+      micStatus.innerText = '🔴 Recording active... Speak clearly into your mic.';
+
+      recordInterval = setInterval(() => {
+        secondsElapsed++;
+        const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+        const secs = String(secondsElapsed % 60).padStart(2, '0');
+        recordTimer.innerText = `${mins}:${secs}`;
+      }, 1000);
+
+    } catch (err) {
+      alert("Microphone access denied or not available: " + err.message);
+    }
+  });
 
   audioInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
+      recordedBlob = null;
       audioPlayer.src = URL.createObjectURL(file);
       audioPlayer.style.display = 'block';
     }
@@ -82,8 +156,9 @@
 
   document.getElementById('speech-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!audioInput.files[0]) {
-      alert("Please select an audio file first.");
+    const file = audioInput.files[0] || recordedBlob;
+    if (!file) {
+      alert("Please record audio with your microphone or select an audio file first.");
       return;
     }
 
@@ -101,7 +176,11 @@
     transcribeSpinner.style.display = 'inline-block';
 
     const formData = new FormData();
-    formData.append('audio', audioInput.files[0]);
+    if (audioInput.files[0]) {
+      formData.append('audio', audioInput.files[0]);
+    } else {
+      formData.append('audio', recordedBlob, 'mic_recording.wav');
+    }
     formData.append('language', document.getElementById('language-select').value);
 
     try {
@@ -115,12 +194,12 @@
         placeholder.style.display = 'none';
         resultContainer.style.display = 'block';
         transcriptBox.innerHTML = `<span style="color:var(--danger)">⚠️ Error: ${data.error}</span>`;
-        summaryBox.innerText = 'Summary unavailable due to transcription error.';
+        summaryBox.innerText = 'Summary unavailable.';
       } else {
         placeholder.style.display = 'none';
         resultContainer.style.display = 'block';
         transcriptBox.innerText = data.transcript || 'No spoken text detected in audio.';
-        summaryBox.innerText = data.summary || 'Summary unavailable.';
+        summaryBox.innerHTML = data.summary ? (window.marked ? marked.parse(data.summary) : data.summary) : 'Summary unavailable.';
         copyBtn.style.display = 'inline-block';
       }
     } catch (err) {
@@ -129,7 +208,7 @@
       transcriptBox.innerHTML = `<span style="color:var(--danger)">⚠️ Request failed: ${err.message}</span>`;
     } finally {
       btnTranscribe.disabled = false;
-      transcribeText.innerText = 'Transcribe & Summarize Call 🎙️';
+      transcribeText.innerText = 'Transcribe & Summarize Audio ⚡';
       transcribeSpinner.style.display = 'none';
     }
   });

@@ -55,7 +55,7 @@
       <p style="font-size: 0.85rem; margin-top: 4px;">Upload a damaged product photo to see AI visual detection results.</p>
     </div>
 
-    <div id="vision-result" class="result-box" style="display: none; background: #ffffff; border: none; padding: 0;"></div>
+    <div id="vision-result" class="result-box markdown-body" style="display: none; background: #ffffff; border: none; padding: 0;"></div>
   </div>
 
 </div>
@@ -126,7 +126,7 @@
       } else {
         placeholder.style.display = 'none';
         resultBox.style.display = 'block';
-        resultBox.innerText = data.result;
+        resultBox.innerHTML = window.marked ? marked.parse(data.result) : data.result;
         copyBtn.style.display = 'inline-block';
       }
     } catch (err) {
@@ -150,3 +150,4 @@
   });
 </script>
 {% endblock %}
+

@@ -49,7 +49,7 @@
       <p style="font-size: 0.85rem; margin-top: 4px;">Paste a customer ticket on the left and click "Run Intelligence Triage".</p>
     </div>
 
-    <div id="result-display" class="result-box" style="display: none; background: #ffffff; border: none; padding: 0;"></div>
+    <div id="result-display" class="result-box markdown-body" style="display: none; background: #ffffff; border: none; padding: 0;"></div>
   </div>
 
 </div>
@@ -118,7 +118,13 @@ I attempted to update the firmware to v2.4.0 via the mobile app this morning. At
       } else {
         placeholder.style.display = 'none';
         resultBox.style.display = 'block';
-        resultBox.innerText = data.result;
+        let outputHtml = window.marked ? marked.parse(data.result) : data.result;
+        if (data.saved_ticket_id) {
+          outputHtml = `<div style="background: #ecfdf5; border: 1px solid #6ee7b7; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 0.85rem; color: #065f46;">
+            ✅ Auto-saved to Database: <strong>${data.saved_ticket_id}</strong> • <a href="/tickets" style="color:#047857; text-decoration:underline;">View in Tickets DB →</a>
+          </div>` + outputHtml;
+        }
+        resultBox.innerHTML = outputHtml;
         copyBtn.style.display = 'inline-block';
       }
     } catch (err) {
@@ -141,4 +147,5 @@ I attempted to update the firmware to v2.4.0 via the mobile app this morning. At
     });
   });
 </script>
+
 {% endblock %}

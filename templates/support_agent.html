@@ -56,7 +56,7 @@
       <p style="font-size: 0.85rem; margin-top: 4px;">Fill in the product details and click to run deep diagnostic assessment.</p>
     </div>
 
-    <div id="agent-result" class="result-box" style="display: none; background: #ffffff; border: none; padding: 0;"></div>
+    <div id="agent-result" class="result-box markdown-body" style="display: none; background: #ffffff; border: none; padding: 0;"></div>
   </div>
 
 </div>
@@ -101,7 +101,13 @@
       if (data.error) {
         resultBox.innerHTML = `<span style="color:var(--danger)">⚠️ Error: ${data.error}</span>`;
       } else {
-        resultBox.innerText = data.reply;
+        let outputHtml = window.marked ? marked.parse(data.reply) : data.reply;
+        if (data.ticket_id) {
+          outputHtml = `<div style="background: #eff6ff; border: 1px solid #93c5fd; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 0.85rem; color: #1e40af;">
+            🛡️ Official Escalation Logged: <strong>${data.ticket_id}</strong> • <a href="/tickets" style="color:#2563eb; text-decoration:underline;">View in Tickets DB →</a>
+          </div>` + outputHtml;
+        }
+        resultBox.innerHTML = outputHtml;
         copyBtn.style.display = 'inline-block';
       }
     } catch (err) {
@@ -125,3 +131,4 @@
   });
 </script>
 {% endblock %}
+
